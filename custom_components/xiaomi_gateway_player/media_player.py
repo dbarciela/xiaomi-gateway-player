@@ -144,7 +144,7 @@ def _miio_send_command(
 
 
 async def _serve_hls_file(hass: HomeAssistant, request: web.Request, filename: str) -> web.Response:
-    """Serve .m3u8 and .aac files and log every request from the Xiaomi Gateway."""
+    """Serve .m3u8 and .aac files in exact Ximalaya MIOT_MW300 format and log Gateway requests."""
     _LOGGER.warning(
         "GATEWAY HLS GET [port=%s]: file=%s remote=%s url=%s ua=%s",
         request.url.port,
@@ -159,16 +159,57 @@ async def _serve_hls_file(hass: HomeAssistant, request: web.Request, filename: s
         _LOGGER.warning("GATEWAY HLS 404: %s", fpath)
         return web.Response(status=404, text="Not found")
 
-    def _read() -> bytes:
+    if filename.endswith(".m3u8"):
+        def _read_text() -> str:
+            with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                return f.read()
+
+        raw_m3u = await hass.async_add_executor_job(_read_text)
+        seq = 1
+        seq_m = re.search(r"#EXT-X-MEDIA-SEQUENCE:(\d+)", raw_m3u)
+        if seq_m:
+            seq = int(seq_m.group(1)) + 1
+
+        seg_urls = [
+            line.strip()
+            for line in raw_m3u.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+        # Build exact Ximalaya CRLF format expected by MIOT_MW300 C parser
+        out_lines = [
+            "#EXTM3U",
+            "#EXT-X-VERSION:3",
+            "#EXT-X-TARGETDURATION:7",
+            f"#EXT-X-MEDIA-SEQUENCE:{seq}",
+        ]
+        for u in seg_urls:
+            out_lines.append("#EXTINF:7,")
+            out_lines.append(u)
+        body_bytes = ("\r\n".join(out_lines) + "\r\n").encode("utf-8")
+        _LOGGER.warning("GATEWAY HLS M3U8 SERVED (%d segs):\n%s", len(seg_urls), "\n".join(out_lines))
+        return web.Response(
+            body=body_bytes,
+            content_type="application/vnd.apple.mpegurl",
+            headers={
+                "Content-Length": str(len(body_bytes)),
+                "Cache-Control": "no-cache",
+                "Expires": "Thu, 01 Jan 1970 00:00:01 GMT",
+            },
+        )
+
+    def _read_bytes() -> bytes:
         with open(fpath, "rb") as f:
             return f.read()
 
-    data = await hass.async_add_executor_job(_read)
-    ctype = "application/vnd.apple.mpegurl" if filename.endswith(".m3u8") else "audio/aac"
+    data = await hass.async_add_executor_job(_read_bytes)
     return web.Response(
         body=data,
-        content_type=ctype,
-        headers={"Content-Length": str(len(data)), "Connection": "close"},
+        content_type="audio/aac",
+        headers={
+            "Content-Length": str(len(data)),
+            "Cache-Control": "no-cache",
+        },
     )
 
 
@@ -187,9 +228,13 @@ class GatewayHLSView(HomeAssistantView):
 
 
 async def _ensure_port80_hls_server(hass: HomeAssistant) -> bool:
-    """Start a lightweight HTTP server on port 80 if available (DGNWG02LM play_specify_fm often requires port 80)."""
-    if hass.data.get(f"{DOMAIN}_port80_runner") is not None:
-        return True
+    """Start (or restart on reload) a lightweight HTTP server on port 80."""
+    old_runner = hass.data.pop(f"{DOMAIN}_port80_runner", None)
+    if old_runner is not None:
+        try:
+            await old_runner.cleanup()
+        except Exception:
+            pass
     try:
         app = web.Application()
 
@@ -871,6 +916,8 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
                 "-sn",
                 "-map_metadata",
                 "-1",
+                "-ac",
+                "2",
                 "-ar",
                 "44100",
                 "-c:a",
@@ -886,9 +933,9 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
                 "-segment_time",
                 "7",
                 "-segment_list_size",
-                "3",
-                "-segment_wrap",
                 "5",
+                "-segment_wrap",
+                "50",
                 "-segment_list_entry_prefix",
                 entry_prefix,
                 seg_pattern,
@@ -901,11 +948,11 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
             stderr=asyncio.subprocess.DEVNULL,
         )
 
-        # Wait until the first 7s chunk (64000.aac) is finished and written to gw_radio.m3u8 (when 64001.aac opens)
-        seg1 = os.path.join(www_dir, "64001.aac")
-        for _ in range(65):
+        # Wait until at least 3 chunks (64000, 64001, 64002) are finished and listed in gw_radio.m3u8 (when 64003 opens)
+        seg3 = os.path.join(www_dir, "64003.aac")
+        for _ in range(90):
             await asyncio.sleep(0.15)
-            if os.path.exists(m3u8_path) and os.path.exists(seg1):
+            if os.path.exists(m3u8_path) and os.path.exists(seg3):
                 break
 
         vol_int = (
