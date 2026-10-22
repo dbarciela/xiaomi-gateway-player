@@ -2,13 +2,15 @@
   "config": {
     "step": {
       "user": {
-        "title": "Xiaomi Gateway Media & TTS Player",
-        "description": "Configure a reprodução local de áudio, TTS e MyInstants para a Xiaomi Mi Control Hub (DGNWG02LM / lumi.gateway.v3).",
+        "title": "Xiaomi Gateway Media, Radio & TTS Player",
+        "description": "Configure a reprodução local de áudio, Rádios Online (Radio Browser), TTS e MyInstants para a Xiaomi Mi Control Hub (DGNWG02LM / lumi.gateway.v3).",
         "data": {
           "host": "Endereço IP da Gateway",
           "token": "Token Miio (32 caracteres hex)",
           "ha_url": "URL HTTP Local do Home Assistant",
-          "name": "Nome Amigável da Entidade"
+          "name": "Nome Amigável da Entidade",
+          "radio_country": "Código ISO do País para Rádios (ex: PT, ES, GB, BR, US)",
+          "favorite_radios": "Rádios Favoritas para o Seletor de Fonte (separadas por vírgula ou Nome|URL)"
         }
       }
     },
@@ -17,6 +19,22 @@
     },
     "abort": {
       "already_configured": "Esta Xiaomi Gateway já se encontra configurada."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opções de Rádio, Streaming HLS e Subsonic",
+        "description": "Personalize o filtro de país padrão para pesquisas no Radio Browser, as rádios favoritas exibidas no seletor de fonte (Source) e credenciais opcionais para servidores Subsonic / Navidrome.",
+        "data": {
+          "radio_country": "Código ISO do País para Rádios (ex: PT, ES, GB, BR, US)",
+          "favorite_radios": "Rádios Favoritas para o Seletor de Fonte (separadas por vírgula ou Nome|URL)",
+          "ha_url": "URL HTTP Local do Home Assistant",
+          "subsonic_url": "URL do Servidor Subsonic / Navidrome (opcional, ex: http://192.168.1.100:4533)",
+          "subsonic_user": "Utilizador Subsonic (opcional)",
+          "subsonic_password": "Password Subsonic (opcional)"
+        }
+      }
     }
   }
 }

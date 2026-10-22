@@ -1,3 +1,32 @@
+play_radio:
+  name: Tocar Rádio Online (Radio Browser / Stream)
+  description: Pesquisa uma estação de rádio na base de dados mundial gratuita Radio Browser (com filtro opcional por país) ou recebe um URL de stream e transmite em contínuo para a Xiaomi Gateway via HLS local.
+  fields:
+    query:
+      name: Estação de Rádio ou URL
+      description: Nome da estação (ex. "Smooth FM", "Antena 1", "TSF", "Rádio Nova Era", "BBC Radio 1 [GB]") ou URL direto do stream.
+      required: true
+      example: "Smooth FM"
+      selector:
+        text:
+    country:
+      name: Código ISO do País (Opcional)
+      description: Código de 2 letras do país para filtrar a pesquisa no Radio Browser (ex. PT, ES, GB, BR, US). Se omitido, usa o país configurado na integração.
+      required: false
+      example: "PT"
+      selector:
+        text:
+    volume:
+      name: Volume (1-100)
+      description: Volume de reprodução (1 a 100).
+      required: false
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: slider
+
 save_sound:
   name: Guardar Som num Slot da Gateway
   description: Converte qualquer URL de áudio, página do MyInstants ou pesquisa ("myinstants:nome") para AAC e guarda permanentemente num slot da memória flash da Xiaomi Gateway (10001 a 10029) para reprodução instantânea (<50ms).

@@ -1,7 +1,7 @@
 {
   "domain": "xiaomi_gateway_player",
   "name": "Xiaomi Gateway Media & TTS Player",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "config_flow": true,
   "documentation": "https://github.com/dbarciela/xiaomi-gateway-player",
   "issue_tracker": "https://github.com/dbarciela/xiaomi-gateway-player/issues",
