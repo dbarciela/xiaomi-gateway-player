@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Xiaomi Gateway Media & TTS Player",
+        "description": "Configure local Miio audio & TTS playback for your Xiaomi Mi Control Hub (DGNWG02LM / lumi.gateway.v3).",
+        "data": {
+          "host": "Gateway IP Address",
+          "token": "Miio Token (32 hex chars)",
+          "ha_url": "Home Assistant Local HTTP URL",
+          "name": "Entity Friendly Name"
+        }
+      }
+    },
+    "error": {
+      "invalid_token": "The Miio token must be exactly 32 hexadecimal characters."
+    },
+    "abort": {
+      "already_configured": "This Xiaomi Gateway is already configured."
+    }
+  }
+}

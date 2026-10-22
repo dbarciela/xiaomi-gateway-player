@@ -1,0 +1,48 @@
+save_sound:
+  name: Guardar Som num Slot da Gateway
+  description: Converte qualquer URL de áudio, página do MyInstants ou pesquisa ("myinstants:nome") para AAC e guarda permanentemente num slot da memória flash da Xiaomi Gateway (10001 a 10029) para reprodução instantânea (<50ms).
+  fields:
+    url:
+      name: URL ou Pesquisa MyInstants
+      description: Link da página do MyInstants, link direto .mp3, caminho local (/local/...) ou pesquisa "myinstants:termo".
+      required: true
+      example: "https://www.myinstants.com/pt/instant/vine-boom-sound-70972/"
+      selector:
+        text:
+    slot_id:
+      name: Slot ID
+      description: Número do slot na memória da Gateway (10001 a 10029).
+      required: false
+      default: "10006"
+      example: "10006"
+      selector:
+        text:
+    play_now:
+      name: Tocar imediatamente após guardar
+      description: Se ativo, reproduz o som assim que terminar o upload para a Gateway.
+      required: false
+      default: true
+      selector:
+        boolean:
+    volume:
+      name: Volume (1-100)
+      description: Volume de reprodução de teste (1 a 100). Cuidado acima de 25!
+      required: false
+      default: 12
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: slider
+
+delete_sound:
+  name: Apagar Som de um Slot da Gateway
+  description: Remove um som personalizado da memória flash da Xiaomi Gateway para libertar espaço.
+  fields:
+    slot_id:
+      name: Slot ID
+      description: Número do slot a apagar (ex. 10006).
+      required: true
+      example: "10006"
+      selector:
+        text:
