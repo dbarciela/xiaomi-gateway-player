@@ -64,6 +64,64 @@ DEFAULT_PT_FAVORITES = [
     "RFM",
 ]
 
+VERIFIED_PT_STREAMS: dict[str, tuple[str, str, str | None]] = {
+    "radio comercial": (
+        "https://stream-icy.bauermedia.pt/comercial.aac",
+        "Rádio Comercial",
+        "https://radiocomercial.pt/favicon.ico",
+    ),
+    "rádio comercial": (
+        "https://stream-icy.bauermedia.pt/comercial.aac",
+        "Rádio Comercial",
+        "https://radiocomercial.pt/favicon.ico",
+    ),
+    "comercial": (
+        "https://stream-icy.bauermedia.pt/comercial.aac",
+        "Rádio Comercial",
+        "https://radiocomercial.pt/favicon.ico",
+    ),
+    "smooth fm": (
+        "https://stream-icy.bauermedia.pt/smooth.aac",
+        "Smooth FM",
+        "https://smoothfm.pt/favicon.ico",
+    ),
+    "m80": (
+        "https://stream-icy.bauermedia.pt/m80.aac",
+        "M80 Rádio",
+        "https://m80.pt/favicon.ico",
+    ),
+    "m80 radio": (
+        "https://stream-icy.bauermedia.pt/m80.aac",
+        "M80 Rádio",
+        "https://m80.pt/favicon.ico",
+    ),
+    "m80 rádio": (
+        "https://stream-icy.bauermedia.pt/m80.aac",
+        "M80 Rádio",
+        "https://m80.pt/favicon.ico",
+    ),
+    "cidade fm": (
+        "https://stream-icy.bauermedia.pt/cidade.aac",
+        "Cidade FM",
+        "https://cidade.fm/favicon.ico",
+    ),
+    "radio nova era": (
+        "http://centova.radio.com.pt:9478/",
+        "Rádio Nova Era",
+        "https://radionovaera.pt/favicon.ico",
+    ),
+    "rádio nova era": (
+        "http://centova.radio.com.pt:9478/",
+        "Rádio Nova Era",
+        "https://radionovaera.pt/favicon.ico",
+    ),
+    "nova era": (
+        "http://centova.radio.com.pt:9478/",
+        "Rádio Nova Era",
+        "https://radionovaera.pt/favicon.ico",
+    ),
+}
+
 _MIIO_LOCK = threading.Lock()
 _MSG_ID_COUNTER = int(time.time() * 10) % 500000 + 60000
 
@@ -554,6 +612,22 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
                 self._attr_extra_state_attributes["gateway_fm_status"] = fm_res.get("current_status")
                 self._attr_extra_state_attributes["gateway_fm_volume"] = fm_res.get("current_volume")
                 self._attr_extra_state_attributes["gateway_fm_program"] = fm_res.get("current_program")
+
+            zb_ch = await self._send_miio("get_zigbee_channel", [], timeout=2.5)
+            if zb_ch and "result" in zb_ch and zb_ch["result"]:
+                self._attr_extra_state_attributes["zigbee_channel"] = zb_ch["result"][0]
+
+            dev_list = await self._send_miio("get_device_prop", ["lumi.0", "device_list"], timeout=2.5)
+            if dev_list and "result" in dev_list and isinstance(dev_list["result"], list):
+                raw_list = dev_list["result"]
+                parsed_devs = {}
+                for i in range(0, len(raw_list) - 4, 5):
+                    sid = str(raw_list[i])
+                    parsed_devs[sid] = {
+                        "online": bool(raw_list[i + 2] == 1),
+                        "fw_version": raw_list[i + 4],
+                    }
+                self._attr_extra_state_attributes["zigbee_subdevices"] = parsed_devs
         except Exception as err:
             _LOGGER.debug("Could not refresh Xiaomi Gateway music info: %s", err)
 
@@ -610,6 +684,9 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
             .strip()
             .upper()
         )
+        if cc in ("PT", "") and query.lower() in VERIFIED_PT_STREAMS:
+            return VERIFIED_PT_STREAMS[query.lower()]
+
         session = async_get_clientsession(self.hass)
         headers = {"User-Agent": "HomeAssistant-XiaomiGatewayPlayer/1.1"}
 
