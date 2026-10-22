@@ -401,6 +401,13 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
                 self._attr_extra_state_attributes["free_space_bytes"] = space_resp[
                     "result"
                 ][0]
+
+            fm_resp = await self._send_miio("get_prop_fm", [], timeout=2.5)
+            if fm_resp and "result" in fm_resp and isinstance(fm_resp["result"], dict):
+                fm_res = fm_resp["result"]
+                self._attr_extra_state_attributes["gateway_fm_status"] = fm_res.get("current_status")
+                self._attr_extra_state_attributes["gateway_fm_volume"] = fm_res.get("current_volume")
+                self._attr_extra_state_attributes["gateway_fm_program"] = fm_res.get("current_program")
         except Exception as err:
             _LOGGER.debug("Could not refresh Xiaomi Gateway music info: %s", err)
 
@@ -712,12 +719,16 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
         t0 = time.monotonic()
 
         www_dir = self.hass.config.path("www")
-        os.makedirs(www_dir, exist_ok=True)
-        for old_file in glob.glob(os.path.join(www_dir, "gw_radio*")):
-            try:
-                os.remove(old_file)
-            except OSError:
-                pass
+
+        def _cleanup_old_segments() -> None:
+            os.makedirs(www_dir, exist_ok=True)
+            for old_file in glob.glob(os.path.join(www_dir, "gw_radio*")):
+                try:
+                    os.remove(old_file)
+                except OSError:
+                    pass
+
+        await self.hass.async_add_executor_job(_cleanup_old_segments)
 
         m3u8_path = os.path.join(www_dir, RADIO_M3U8_FILENAME)
         seg_pattern = os.path.join(www_dir, "gw_radio_%d.aac")
@@ -732,11 +743,15 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
 
         if len(source_list) > 1:
             concat_path = "/tmp/gw_concat_playlist.txt"
-            with open(concat_path, "w", encoding="utf-8") as f:
-                f.write("ffconcat version 1.0\n")
-                for item in source_list:
-                    escaped = item.replace("'", "'\\''")
-                    f.write(f"file '{escaped}'\n")
+
+            def _write_concat() -> None:
+                with open(concat_path, "w", encoding="utf-8") as f:
+                    f.write("ffconcat version 1.0\n")
+                    for item in source_list:
+                        escaped = item.replace("'", "'\\''")
+                        f.write(f"file '{escaped}'\n")
+
+            await self.hass.async_add_executor_job(_write_concat)
             cmd.extend(
                 [
                     "-f",
@@ -778,11 +793,11 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
                 "-f",
                 "segment",
                 "-segment_time",
-                "2",
+                "3",
                 "-segment_format",
                 "adts",
                 "-segment_list_size",
-                "5",
+                "6",
                 "-segment_wrap",
                 "20",
                 "-segment_list_flags",
@@ -801,10 +816,11 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
             stderr=asyncio.subprocess.DEVNULL,
         )
 
-        first_seg = os.path.join(www_dir, "gw_radio_0.aac")
-        for _ in range(50):
-            await asyncio.sleep(0.12)
-            if os.path.exists(m3u8_path) and os.path.exists(first_seg):
+        # Wait until at least 2 full segments (gw_radio_0.aac and gw_radio_1.aac) are in gw_radio.m3u8
+        seg2 = os.path.join(www_dir, "gw_radio_2.aac")
+        for _ in range(55):
+            await asyncio.sleep(0.15)
+            if os.path.exists(m3u8_path) and os.path.exists(seg2):
                 break
 
         vol_int = (
