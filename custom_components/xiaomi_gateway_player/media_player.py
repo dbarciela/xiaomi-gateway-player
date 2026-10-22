@@ -17,12 +17,14 @@ from typing import Any
 from urllib.parse import quote_plus, urljoin, urlsplit
 
 import aiohttp
+from aiohttp import web
 import voluptuous as vol
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding as sym_padding
 
 from homeassistant.components import media_source
+from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.media_player import (
     BrowseMedia,
     MediaPlayerEntity,
@@ -141,12 +143,87 @@ def _miio_send_command(
     return None
 
 
+async def _serve_hls_file(hass: HomeAssistant, request: web.Request, filename: str) -> web.Response:
+    """Serve .m3u8 and .aac files and log every request from the Xiaomi Gateway."""
+    _LOGGER.warning(
+        "GATEWAY HLS GET [port=%s]: file=%s remote=%s url=%s ua=%s",
+        request.url.port,
+        filename,
+        request.remote,
+        request.url,
+        request.headers.get("User-Agent"),
+    )
+    www_dir = hass.config.path("www")
+    fpath = os.path.join(www_dir, os.path.basename(filename))
+    if not os.path.exists(fpath):
+        _LOGGER.warning("GATEWAY HLS 404: %s", fpath)
+        return web.Response(status=404, text="Not found")
+
+    def _read() -> bytes:
+        with open(fpath, "rb") as f:
+            return f.read()
+
+    data = await hass.async_add_executor_job(_read)
+    ctype = "application/vnd.apple.mpegurl" if filename.endswith(".m3u8") else "audio/aac"
+    return web.Response(
+        body=data,
+        content_type=ctype,
+        headers={"Content-Length": str(len(data)), "Connection": "close"},
+    )
+
+
+class GatewayHLSView(HomeAssistantView):
+    """Unauthenticated HTTP view on HA port (8123) to serve .m3u8 and .aac chunks."""
+
+    requires_auth = False
+    url = "/api/gw_hls/{filename}"
+    name = "api:gw_hls"
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.hass = hass
+
+    async def get(self, request: web.Request, filename: str) -> web.Response:
+        return await _serve_hls_file(self.hass, request, filename)
+
+
+async def _ensure_port80_hls_server(hass: HomeAssistant) -> bool:
+    """Start a lightweight HTTP server on port 80 if available (DGNWG02LM play_specify_fm often requires port 80)."""
+    if hass.data.get(f"{DOMAIN}_port80_runner") is not None:
+        return True
+    try:
+        app = web.Application()
+
+        async def _handle(request: web.Request) -> web.Response:
+            fname = request.match_info.get("filename", "")
+            return await _serve_hls_file(hass, request, fname)
+
+        app.router.add_get("/{filename}", _handle)
+        app.router.add_get("/local/{filename}", _handle)
+        app.router.add_get("/api/gw_hls/{filename}", _handle)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "0.0.0.0", 80)
+        await site.start()
+        hass.data[f"{DOMAIN}_port80_runner"] = runner
+        _LOGGER.warning("GATEWAY HLS: Bound lightweight HTTP server on port 80 successfully!")
+        return True
+    except Exception as err:
+        _LOGGER.warning("GATEWAY HLS: Could not bind port 80 (%s), using HA port instead.", err)
+        return False
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Xiaomi Gateway Media Player from a config entry."""
+    if not hass.data.get(f"{DOMAIN}_view_registered"):
+        hass.http.register_view(GatewayHLSView(hass))
+        hass.data[f"{DOMAIN}_view_registered"] = True
+
+    port80_ok = await _ensure_port80_hls_server(hass)
+
     host = entry.data["host"]
     token = entry.data["token"]
     ha_url = entry.options.get(
@@ -733,7 +810,12 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
 
         m3u8_path = os.path.join(www_dir, RADIO_M3U8_FILENAME)
         seg_pattern = os.path.join(www_dir, "64%03d.aac")
-        entry_prefix = f"{self._ha_url}/local/"
+        ha_host = urlsplit(self._ha_url).hostname or "192.168.1.150"
+        if self.hass.data.get(f"{DOMAIN}_port80_runner") is not None:
+            base_hls_url = f"http://{ha_host}"
+        else:
+            base_hls_url = f"{self._ha_url}/api/gw_hls"
+        entry_prefix = f"{base_hls_url}/"
 
         source_list = [sources] if isinstance(sources, str) else list(sources)
         if len(source_list) == 1:
@@ -833,11 +915,12 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
         )
         await self._send_miio("volume_ctrl_fm", [str(vol_int)])
         prog_id = int(time.time()) % 8000 + 1001
-        hls_url = f"{self._ha_url}/local/{RADIO_M3U8_FILENAME}"
-        await self._send_miio(
+        hls_url = f"{base_hls_url}/{RADIO_M3U8_FILENAME}"
+        play_resp = await self._send_miio(
             "play_specify_fm",
             {"id": prog_id, "type": 0, "url": hls_url},
         )
+        _LOGGER.warning("GATEWAY play_specify_fm url=%s id=%s resp=%s", hls_url, prog_id, play_resp)
 
         elapsed_ms = round((time.monotonic() - t0) * 1000, 1)
         self._is_hls_streaming = True
