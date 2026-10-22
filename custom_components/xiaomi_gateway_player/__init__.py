@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import sys
 
+from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -18,6 +19,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         mod_name = f"custom_components.{DOMAIN}.{submod}"
         if mod_name in sys.modules:
             await hass.async_add_executor_job(importlib.reload, sys.modules[mod_name])
+        else:
+            await hass.async_add_executor_job(importlib.import_module, mod_name)
+
+    cf_mod = sys.modules.get(f"custom_components.{DOMAIN}.config_flow")
+    if cf_mod and hasattr(cf_mod, "XiaomiGatewayPlayerConfigFlow"):
+        config_entries.HANDLERS[DOMAIN] = cf_mod.XiaomiGatewayPlayerConfigFlow
+    entry.__dict__.pop("supports_options", None)
+
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

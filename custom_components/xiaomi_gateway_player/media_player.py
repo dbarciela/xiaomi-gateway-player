@@ -263,6 +263,30 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Xiaomi Gateway Media Player from a config entry."""
+    import importlib
+    import sys
+    from homeassistant import config_entries as _ce
+
+    cf_mod_name = f"custom_components.{DOMAIN}.config_flow"
+    if cf_mod_name in sys.modules:
+        await hass.async_add_executor_job(importlib.reload, sys.modules[cf_mod_name])
+    else:
+        await hass.async_add_executor_job(importlib.import_module, cf_mod_name)
+    cf_mod = sys.modules.get(cf_mod_name)
+    if cf_mod and hasattr(cf_mod, "XiaomiGatewayPlayerConfigFlow"):
+        _ce.HANDLERS[DOMAIN] = cf_mod.XiaomiGatewayPlayerConfigFlow
+    entry.__dict__.pop("supports_options", None)
+    entry.__dict__.pop("_supports_options", None)
+    try:
+        object.__setattr__(entry, "_supports_options", True)
+    except Exception:
+        pass
+
+    if not entry.update_listeners:
+        async def _reload_on_options_update(hass_Instance: HomeAssistant, updated_entry: ConfigEntry) -> None:
+            await hass_Instance.config_entries.async_reload(updated_entry.entry_id)
+        entry.async_on_unload(entry.add_update_listener(_reload_on_options_update))
+
     if not hass.data.get(f"{DOMAIN}_view_registered"):
         hass.http.register_view(GatewayHLSView(hass))
         hass.data[f"{DOMAIN}_view_registered"] = True

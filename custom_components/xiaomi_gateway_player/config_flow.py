@@ -75,9 +75,14 @@ class XiaomiGatewayPlayerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class XiaomiGatewayPlayerOptionsFlow(config_entries.OptionsFlow):
     """Handle options flow for Xiaomi Gateway Media & TTS Player (Radio Browser & Subsonic)."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+    def __init__(self, config_entry: config_entries.ConfigEntry | None = None) -> None:
         """Initialize options flow."""
         self._config_entry = config_entry
+
+    @property
+    def _entry(self) -> config_entries.ConfigEntry:
+        """Return active config entry across HA versions."""
+        return getattr(self, "config_entry", None) or self._config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -86,23 +91,24 @@ class XiaomiGatewayPlayerOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
+        entry = self._entry
         country_default = (self.hass.config.country or "").upper()
-        current_country = self._config_entry.options.get(
+        current_country = entry.options.get(
             "radio_country",
-            self._config_entry.data.get("radio_country", country_default),
+            entry.data.get("radio_country", country_default),
         )
         default_favs = DEFAULT_FAVORITES_BY_COUNTRY.get(current_country.upper(), "")
-        current_favs = self._config_entry.options.get(
+        current_favs = entry.options.get(
             "favorite_radios",
-            self._config_entry.data.get("favorite_radios", default_favs),
+            entry.data.get("favorite_radios", default_favs),
         )
-        current_ha_url = self._config_entry.options.get(
+        current_ha_url = entry.options.get(
             "ha_url",
-            self._config_entry.data.get("ha_url", "http://192.168.1.150:8123"),
+            entry.data.get("ha_url", "http://192.168.1.150:8123"),
         )
-        subsonic_url = self._config_entry.options.get("subsonic_url", "")
-        subsonic_user = self._config_entry.options.get("subsonic_user", "")
-        subsonic_password = self._config_entry.options.get("subsonic_password", "")
+        subsonic_url = entry.options.get("subsonic_url", "")
+        subsonic_user = entry.options.get("subsonic_user", "")
+        subsonic_password = entry.options.get("subsonic_password", "")
 
         return self.async_show_form(
             step_id="init",
