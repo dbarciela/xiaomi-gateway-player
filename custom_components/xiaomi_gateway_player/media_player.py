@@ -722,16 +722,18 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
 
         def _cleanup_old_segments() -> None:
             os.makedirs(www_dir, exist_ok=True)
-            for old_file in glob.glob(os.path.join(www_dir, "gw_radio*")):
-                try:
-                    os.remove(old_file)
-                except OSError:
-                    pass
+            for pattern in ("gw_radio*", "64*.aac"):
+                for old_file in glob.glob(os.path.join(www_dir, pattern)):
+                    try:
+                        os.remove(old_file)
+                    except OSError:
+                        pass
 
         await self.hass.async_add_executor_job(_cleanup_old_segments)
 
         m3u8_path = os.path.join(www_dir, RADIO_M3U8_FILENAME)
-        seg_pattern = os.path.join(www_dir, "gw_radio_%d.aac")
+        seg_pattern = os.path.join(www_dir, "64%03d.aac")
+        entry_prefix = f"{self._ha_url}/local/"
 
         source_list = [sources] if isinstance(sources, str) else list(sources)
         if len(source_list) == 1:
@@ -779,33 +781,34 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
                 )
             cmd.extend(["-i", single_src])
 
+        # Xiaomi Gateway DGNWG02LM HLS requirements (from cocacola89/mi_gateway_radio & miwifiradio):
+        # ADTS AAC chunks, 7s segment_time, 44100 Hz, 64k bitrate, NO ID3 metadata, full URL entry prefix
         cmd.extend(
             [
                 "-vn",
-                "-ac",
-                "1",
+                "-sn",
+                "-map_metadata",
+                "-1",
                 "-ar",
-                "22050",
+                "44100",
                 "-c:a",
                 "aac",
                 "-b:a",
-                "32k",
+                "64k",
                 "-f",
-                "segment",
-                "-segment_time",
-                "3",
-                "-segment_format",
-                "adts",
-                "-segment_list_size",
-                "6",
-                "-segment_wrap",
-                "20",
-                "-segment_list_flags",
-                "+live",
+                "ssegment",
                 "-segment_list",
                 m3u8_path,
-                "-segment_list_type",
-                "m3u8",
+                "-segment_list_flags",
+                "+live",
+                "-segment_time",
+                "7",
+                "-segment_list_size",
+                "3",
+                "-segment_wrap",
+                "5",
+                "-segment_list_entry_prefix",
+                entry_prefix,
                 seg_pattern,
             ]
         )
@@ -816,11 +819,11 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
             stderr=asyncio.subprocess.DEVNULL,
         )
 
-        # Wait until at least 2 full segments (gw_radio_0.aac and gw_radio_1.aac) are in gw_radio.m3u8
-        seg2 = os.path.join(www_dir, "gw_radio_2.aac")
-        for _ in range(55):
+        # Wait until the first 7s chunk (64000.aac) is finished and written to gw_radio.m3u8 (when 64001.aac opens)
+        seg1 = os.path.join(www_dir, "64001.aac")
+        for _ in range(65):
             await asyncio.sleep(0.15)
-            if os.path.exists(m3u8_path) and os.path.exists(seg2):
+            if os.path.exists(m3u8_path) and os.path.exists(seg1):
                 break
 
         vol_int = (
@@ -829,10 +832,11 @@ class XiaomiGatewayMediaPlayer(MediaPlayerEntity):
             else max(1, int(round(self._attr_volume_level * 100)))
         )
         await self._send_miio("volume_ctrl_fm", [str(vol_int)])
+        prog_id = int(time.time()) % 8000 + 1001
         hls_url = f"{self._ha_url}/local/{RADIO_M3U8_FILENAME}"
         await self._send_miio(
             "play_specify_fm",
-            {"id": RADIO_PROGRAM_ID, "type": 0, "url": hls_url},
+            {"id": prog_id, "type": 0, "url": hls_url},
         )
 
         elapsed_ms = round((time.monotonic() - t0) * 1000, 1)
