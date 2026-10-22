@@ -201,6 +201,18 @@ Na pasta [`scripts/upload_gateway_ringtone.ps1`](scripts/upload_gateway_ringtone
 
 ---
 
+## 🙏 Créditos e Agradecimentos (Credits & Acknowledgements)
+
+Este projeto constrói sobre o trabalho de engenharia reversa e documentação da comunidade open-source para o ecossistema Xiaomi Miio / `DGNWG02LM`:
+
+- **[cocacola89/mi_gateway_radio](https://github.com/cocacola89/mi_gateway_radio)** *(MIT License)* — Documentação detalhada dos requisitos estritos do descodificador HLS no firmware `MW300` (`ADTS` com segmentos `.aac` de `7s`, `44100 Hz`, `64 kbps` e ausência de metadados `ID3v2`).
+- **[andr68rus/miwifiradio](https://github.com/andr68rus/miwifiradio)** & **[LennyLip/xiaomi-gateway-radio-stream-home-assistant](https://github.com/LennyLip/xiaomi-gateway-radio-stream-home-assistant)** *(baseado em [dehy/shoutcast2hls](https://github.com/dehy/shoutcast2hls), GPLv3)* — Parâmetros de segmentação `ffmpeg` (`-f ssegment -segment_time 7 -segment_list_entry_prefix`) e arquitetura de entrega HTTP na porta 80 para `play_specify_fm`.
+- **[shaonianzhentan/xiaomi_radio](https://github.com/shaonianzhentan/xiaomi_radio)** *(MIT License)* — Integração e referência de comandos RPC Miio (`get_prop_fm`, `download_user_music`, `play_music_new`).
+- **[sergey-brutsky/mi-home](https://github.com/sergey-brutsky/mi-home)** *(MIT License)* — Documentação e implementação do protocolo local Xiaomi Gateway 2 (`lumi.gateway.v3`).
+- **[Radio Browser API](https://www.radio-browser.info/)** — Base de dados comunitária gratuita e aberta de estações de rádio mundiais.
+
+---
+
 ## 📄 Licença
 
 Distribuído sob a licença [MIT](LICENSE).
